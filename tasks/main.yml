@@ -1,2 +1,31 @@
 ---
-# tasks file for k8s-kubeadm-tear-down
+- name: get nodes
+  shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes | grep -v 'NAME' | awk '{print $1}'
+  register: _k8s_nodes
+  when: inventory_hostname in groups.get('master', [])
+
+- name: print nodes
+  debug:
+    msg: "k8s nodes: {{ _k8s_nodes.stdout }} \n rc: {{ _k8s_nodes.rc }}"
+  when: inventory_hostname in groups.get('master', [])
+
+- name: drain node
+  shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf drain {{ item }} --delete-local-data --force --ignore-daemonsets"
+  with_items: "{{ _k8s_nodes.stdout_lines }}"
+  when: inventory_hostname in groups.get('master', [])
+
+- name: delete node
+  shell: "kubectl --kubeconfig=/etc/kubernetes/admin.conf delete node {{ item }}"
+  with_items: "{{ _k8s_nodes.stdout_lines }}"
+  when: inventory_hostname in groups.get('master', [])
+
+- name: reset nodes
+  shell: "kubeadm reset"
+
+- name: delete complete state file
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - /tmp/kube_join_completed
+    - /tmp/kube_init_completed
